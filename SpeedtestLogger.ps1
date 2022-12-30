@@ -1,4 +1,4 @@
-﻿### CONFIGS
+### CONFIGS
 
 <#
     All Prompted variables are set with default values but are set later with console prompts.
@@ -14,20 +14,26 @@
         If you start, stop and restart the script, you will have 2 log files.
 #>
 
+
 ### Working Directories for Speedtest program and logs  
     [String]$WorkingDirectory = "$PSScriptRoot\#ookla";
     [String]$LoggingDirectory = "$PSScriptRoot\#logs";
+    [String]$SpeedTestExe     = "$WorkingDirectory\Speedtest.exe"
 
 ### Log file naming convention
     [String]$LogStartDateTime = Get-Date -Format "yyyy-MM-dd_HH-mm-ss";
     [String]$LogFileName      = "$LoggingDirectory\SpeedTestLog_$($LogStartDateTime).csv";
 
 ### Speedtest.exe default argument. Arguments get prepended based on SpecifyServer boolean value.
-    [String]$ExeArgs          = "--format=json"
+    [String]$ExeArgs          = "--format=json";
 
-### PlaceHolders
-    [datetime]$NextRunTime    = Get-Date;
+### PlaceHolder
+    [datetime]$NextRunTime = Get-Date;
+
+### Prompt-Set Variables
+    [Int]$IntervalInMinutes   = 5;
     [Int]$ServerID            = 0;
+    [bool]$OnTheMark          = $true;
     
 ### CODE START
 
@@ -36,36 +42,48 @@
     Write-Host "--------------------------------"; Write-Host "Speed test will be conducted once all prompts are answered.";
     if(!(Test-Path -Path $WorkingDirectory)){ New-Item -Path $WorkingDirectory -ItemType Directory | Out-Null; };
     if(!(Test-Path -Path $LoggingDirectory)){ New-Item -Path $LoggingDirectory -ItemType Directory | Out-Null; };
-    if(!(Test-Path -Path $WorkingDirectory\speedtest.exe) -and !(Test-Path -Path $WorkingDirectory\speedtest.md)){
+    if(!(Test-Path -Path $WorkingDirectory\speedtest.exe)){
         Write-Host "--------------------------------"; Write-Host "Missing Speedtest.exe $WorkingDirectory";        
         [String]$result = Read-Host -Prompt "Would you like to download it now? y/n";
         switch($result.ToUpper()){
             "Y"{
                 $HTML = Invoke-WebRequest -Uri "https://www.speedtest.net/apps/cli";
-                $HTML.Links
                 foreach($Line in $HTML.Links){
-                    if($Line.href.ToString().Contains("win64.zip")){
-                        Invoke-WebRequest -Uri $Line.href -Method Get -OutFile $WorkingDirectory\win64.zip;
-                        Expand-Archive -Path $WorkingDirectory\win64.zip -DestinationPath $WorkingDirectory -Force;
-                        Remove-Item -Path $WorkingDirectory\win64.zip;
-                        switch((Test-Path -Path $WorkingDirectory\speedtest.exe) -and (Test-Path -Path $WorkingDirectory\speedtest.md)){
-                            $true{ Write-Warning "Speedtest files have been successfully downloaded and unpacked."; }
-                            $false{ Write-Warning "Failed to locate Speedtest files... Quitting script."; return; }
+                    if($Line.href.ToString().Contains("win64")){
+                        Invoke-WebRequest -Uri $Line.href -Method Get -OutFile $WorkingDirectory\temp.zip;
+                        Expand-Archive -Path $WorkingDirectory\temp.zip -DestinationPath $WorkingDirectory -Force;
+                        Remove-Item -Path $WorkingDirectory\temp.zip;
+                        switch(Test-Path -Path $WorkingDirectory\speedtest.exe -and Test-Path -Path $WorkingDirectory\speedtest.md){
+                            $true{
+                                Write-Warning "Speedtest files have been downloaded and unpacked.";
+                            }
+                            $false{
+                                Write-Warning "Failed to locate Speedtest files... Quitting script."; return;
+                            }
                         };
-                        break;
                     };
                 };
             }
-            "N"{ Write-Warning "Quitting, you no download needed files :("; return; }
-            default{ Write-Warning "Your input was invalid."; return; }
+            "N"{
+                Write-Warning "Quitting, you no download needed files :("; return;
+            }
+            default{
+                Write-Warning "Your input was invalid."; return;
+            }
         };
     };
     Write-Host "--------------------------------";
     [String]$result = Read-Host -Prompt "Do you want interval times to be 'OnTheMark'? y/n";
-    [bool]$OnTheMark = switch($result.ToUpper()){
-        "Y"{ $true; }
-        "N"{ $false; }
-        default{ Write-Warning "Your input was invalid."; return; }
+    switch($result.ToUpper()){
+        "Y"{
+            $OnTheMark = $true;
+        }
+        "N"{
+            $OnTheMark = $false;
+        }
+        default{
+            Write-Warning "Your input was invalid."; return;
+        }
     };
     Write-Host "OnTheMark has been set to: $OnTheMark";
     Write-Host "--------------------------------";
@@ -73,9 +91,11 @@
         $true{ Write-Host "Valid values are: 5,10,15,30 and 60"; }
         $false{ Write-Host "Recommended values: 5-600 (whole numbers)"; }
     };
-    try{ [Int]$IntervalInMinutes = Read-Host -Prompt "Set the interval between speed tests (in minutes)"; }catch{ Write-Warning "Your input was invalid."; return; };
+    $IntervalInMinutes = Read-Host -Prompt "Set the interval between speed tests (in minutes)";
     if($OnTheMark){
-        if(!(5,10,15,20,30,60).Contains($IntervalInMinutes)){ Write-Warning "Script only supports OnTheMark option for intervals 5,10,15,20,30 & 60"; return; };
+        if(!(5,10,15,20,30,60).Contains($IntervalInMinutes)){
+            Write-Warning "Script only supports OnTheMark option for intervals 5, 10, 15, 20, 30 & 60"; return;
+        };
     };
     Write-Host "IntervalInMinutes has been set to: $IntervalInMinutes";
     Write-Host "--------------------------------";
@@ -89,10 +109,12 @@
                 $ExeArgs = "--server-id=$ServerID $ExeArgs";
                 Write-Host "ServerID has been set to: $ServerID";
             };
-            return;
         }
-        "N"{}
-        default{ Write-Warning "Your input was invalid."; return; }
+        "N"{
+        }
+        default{
+            Write-Warning "Your input was invalid."; return;
+        }
     };
 
 ### Set CSV Headers
@@ -107,7 +129,8 @@
         if($OnTheMark){
             while($true){
                 if(((Get-Date).Minute % $IntervalInMinutes -eq 0) -or (Get-Date).Minute -eq 0){
-                    $NextRunTime = (Get-Date).AddMinutes($IntervalInMinutes); break;
+                    $NextRunTime = (Get-Date).AddMinutes($IntervalInMinutes);
+                    break;
                 };
                 Start-Sleep -Seconds 45;
             };
